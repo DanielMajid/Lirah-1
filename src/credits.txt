@@ -1,0 +1,1 @@
+Ported for Korg NTS-1 mkII using nts1_mkii_port_agent.sh scaffold.
