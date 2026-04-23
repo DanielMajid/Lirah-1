@@ -26,7 +26,6 @@ Download the ARM GCC toolchain
 
 Run Make command to build binary</br>
 - run "make install"</p>
-- Load the unit</p>
 
 Open Korg Kontrol Editor</p>
 - Drag .nts1mkiiunit file into the appropriate module category</p>
