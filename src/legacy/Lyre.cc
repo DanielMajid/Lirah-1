@@ -20,7 +20,9 @@ static float s_param_z, s_param, s_paramB;
 static const float s_fs_recip = 1.f / 48000.f;
 //lfo
 
-void OSC_INIT(uint32_t platform, uint32_t api) {
+extern "C" {
+
+void _hook_init(uint32_t platform, uint32_t api) {
 	carrierOscillator.waveFold = 0.f;
 	carrierOscillator.phase = 0.f;
 	carrierOscillator.octave = 0;
@@ -51,7 +53,7 @@ float hyperLFO() {
 }
 	
 
-void OSC_CYCLE(const user_osc_param_t * const params, int32_t *yn, const uint32_t frames) { 
+void _hook_cycle(const user_osc_param_t * const params, int32_t *yn, const uint32_t frames) { 
 
 	s_lfo.setF0(s_param/10.f,s_fs_recip);
 		s_lfoB.setF0(s_paramB/10.f,s_fs_recip);
@@ -60,8 +62,7 @@ void OSC_CYCLE(const user_osc_param_t * const params, int32_t *yn, const uint32_
   float modOsc1;
   float fmOsc;
 
-    float lfos;
-	float lfoz=lfos;
+	float lfoz = 0.f;
 
 
   
@@ -97,7 +98,8 @@ void OSC_CYCLE(const user_osc_param_t * const params, int32_t *yn, const uint32_
 		float mainOsc;
 
 		// Main Oscillator
-		mainOsc = 0.5f * osc_sinf(carrierOscillator.phase) * (1.f + carrierOscillator.waveFold) * (1.f + mainOsc * carrierOscillator.feedback);
+		const float carrier = osc_sinf(carrierOscillator.phase);
+		mainOsc = 0.5f * carrier * (1.f + carrierOscillator.waveFold) * (1.f + carrier * carrierOscillator.feedback);
 
 		//FM oscillator
 		float fmOsc = osc_sinf(modulatorOscillator.phase);
@@ -121,43 +123,42 @@ void OSC_CYCLE(const user_osc_param_t * const params, int32_t *yn, const uint32_
 		 lfoz += lfo_inc;
 		  
   }
-  lfos=lfoz;
 }
 
-void OSC_NOTEON(const user_osc_param_t * const params) {
+void _hook_on(const user_osc_param_t * const params) {
 //		s_lfo.reset();
 }
 
-void OSC_NOTEOFF(const user_osc_param_t * const params) {
+void _hook_off(const user_osc_param_t * const params) {
   (void)params;
 }
 
-void OSC_PARAM(uint16_t index, uint16_t value) {
+void _hook_param(uint16_t index, uint16_t value) {
 	  const float valf = param_val_to_f32(value);
 	  
   switch (index) {
-  case k_user_osc_param_id1:
+  case 0:
     s_param = value;
 	break;  
-  case k_user_osc_param_id2:
+  case 1:
     s_paramB = value;
 	break;  	
-  case k_user_osc_param_id3:
+  case 2:
     carrierOscillator.waveFold = valf * 10.f;
 	break;
-  case k_user_osc_param_id4:
+  case 3:
 	modulatorOscillator.semitone = value;
 	break;
-  case k_user_osc_param_id5:
+  case 4:
 	carrierOscillator.semitone = value;
 	break;
-  case k_user_osc_param_id6:
+  case 5:
 	carrierOscillator.feedback = valf * 20.f;
 	break;	
-   case k_user_osc_param_shape:
+   case 6:
 	carrierOscillator.fmDepth = value * 10;
     break;
-  case k_user_osc_param_shiftshape:
+  case 7:
     carrierOscillator.lfoDepth = valf;
 	break;
   default:
@@ -165,3 +166,5 @@ void OSC_PARAM(uint16_t index, uint16_t value) {
   }
   
 }
+
+}  // extern "C"

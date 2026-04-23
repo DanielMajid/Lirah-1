@@ -1,6 +1,6 @@
-PROJECT ?= Lyre-1
+PROJECT ?= Lirah-1
 MODULE ?= osc
-VERSION ?= 0.1.0
+VERSION ?= 1.0.2
 
 LOGUE_SDK_DIR ?= /Users/majid/repos/logue-sdk
 
