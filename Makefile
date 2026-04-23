@@ -2,7 +2,7 @@ PROJECT ?= Lirah-1
 MODULE ?= osc
 VERSION ?= 1.0.2
 
-LOGUE_SDK_DIR ?= /Users/majid/repos/logue-sdk
+LOGUE_SDK_DIR ?= ./logue-sdk
 
 SDK_PLATFORM_DIR := $(LOGUE_SDK_DIR)/platform/nts-1_mkii
 SDK_TEMPLATE_MAKEFILE := $(SDK_PLATFORM_DIR)/$(if $(filter osc,$(MODULE)),dummy-osc,$(if $(filter modfx,$(MODULE)),dummy-modfx,$(if $(filter delfx,$(MODULE)),dummy-delfx,dummy-revfx)))/Makefile
