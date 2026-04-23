@@ -18,18 +18,16 @@ In desired directory:
 
 Download this repo
 
-- clone this repo https://github.com/DanielMajid/Lirah-1.git</p>
-- git submodule update --init</p>
-- Update logue sdk dependencies
+- git clone --recurse-submodules https://github.com/DanielMajid/Lirah-1.git
 
-cd logue-sdk</p>
-- git submodule update --init</p>
-- tools/gcc/get_gcc_osx.sh</p>
+Download the ARM GCC toolchain
+- cd logue-sdk/tools/gcc/
+- ./get_gcc_osx.sh
+
 Run Make command to build binary</br>
-
 - run "make install"</p>
 - Load the unit</p>
 
 Open Korg Kontrol Editor</p>
-Drag .nts1mkiiunit file into the appropriate module category</p>
-Click sync</p>
+- Drag .nts1mkiiunit file into the appropriate module category</p>
+- Click sync</p>
