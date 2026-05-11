@@ -7,6 +7,10 @@ LOGUE_SDK_DIR ?= ./logue-sdk
 SDK_PLATFORM_DIR := $(LOGUE_SDK_DIR)/platform/nts-1_mkii
 SDK_TEMPLATE_MAKEFILE := $(SDK_PLATFORM_DIR)/$(if $(filter osc,$(MODULE)),dummy-osc,$(if $(filter modfx,$(MODULE)),dummy-modfx,$(if $(filter delfx,$(MODULE)),dummy-delfx,dummy-revfx)))/Makefile
 SDK_GCC_BIN_PATH := $(LOGUE_SDK_DIR)/tools/gcc/gcc-arm-none-eabi-10.3-2021.10/bin
+SANDBOXDIR ?= $(abspath $(LOGUE_SDK_DIR)/websim)
+
+WASM_SRC := src/wasm.cc src/header.c \
+	$(wildcard $(LOGUE_SDK_DIR)/websim/dsp/*.c) $(wildcard $(LOGUE_SDK_DIR)/websim/dsp/*.cpp)
 
 ARM_GCC := $(shell command -v arm-none-eabi-gcc 2>/dev/null)
 ARM_GCC_BIN_PATH := $(patsubst %/,%,$(dir $(ARM_GCC)))
@@ -61,3 +65,10 @@ package: install
 	  zip -q9 "$(PACKAGE)" "$(UNIT_FILE)"; \
 	fi
 	@echo Done
+
+.PHONY: wasm
+wasm: check-sdk
+	@$(MAKE) -f "$(SDK_TEMPLATE_MAKEFILE)" $(SDK_MAKE_ARGS) \
+	  SANDBOXDIR="$(SANDBOXDIR)" \
+	  WASMSRC="$(WASM_SRC)" \
+	  wasm

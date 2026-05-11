@@ -7,6 +7,7 @@ PROJECT_TYPE := osc
 # Auto-compile all C/C++ files in src/legacy/ to avoid manual config updates
 UCSRC = src/header.c $(wildcard src/legacy/*.c)
 UCXXSRC = src/unit.cc $(wildcard src/legacy/*.cc) $(wildcard src/legacy/*.cpp)
+UWASMCXXSRC = src/wasm.cc
 
 UASMSRC =
 UASMXSRC =
@@ -22,3 +23,6 @@ UDEFS =
 UINCDIR += $(abspath $(TOOLSDIR)/../platform/nts-1_mkii/common)
 UINCDIR += $(abspath $(TOOLSDIR)/../platform/nts-1_mkii/common/dsp)
 UINCDIR += /Users/majid/repos/test_folder/Lyre-1-main
+
+# Override WASM sandbox path to point to logue-sdk/websim
+SANDBOXDIR ?= $(abspath $(PROJECT_ROOT)/logue-sdk/websim)

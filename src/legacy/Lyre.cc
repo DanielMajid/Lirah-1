@@ -17,6 +17,7 @@ float lfoShape;
 //lfo
 static uint8_t s_lfo_wave;
 static float s_param_z, s_param, s_paramB;
+static float s_lfoz;
 static const float s_fs_recip = 1.f / 48000.f;
 //lfo
 
@@ -62,7 +63,7 @@ void _hook_cycle(const user_osc_param_t * const params, int32_t *yn, const uint3
   float modOsc1;
   float fmOsc;
 
-	float lfoz = 0.f;
+	float lfoz = s_lfoz;
 
 
   
@@ -123,6 +124,8 @@ void _hook_cycle(const user_osc_param_t * const params, int32_t *yn, const uint3
 		 lfoz += lfo_inc;
 		  
   }
+
+	s_lfoz = lfoz;
 }
 
 void _hook_on(const user_osc_param_t * const params) {

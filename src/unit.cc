@@ -157,7 +157,15 @@ __unit_callback void unit_set_param_value(uint8_t id, int32_t value) {
   }
 
   if (mapped_index != 0xFFFF) {
-    _hook_param(mapped_index, static_cast<uint16_t>(value));
+    int32_t forwarded = value;
+
+    // Legacy indices 2 and 5 are normalized via param_val_to_f32(value),
+    // so map 0..100 UI values to 0..1023 before forwarding.
+    if (mapped_index == 2 || mapped_index == 5) {
+      forwarded = (forwarded * 1023 + 50) / 100;
+    }
+
+    _hook_param(mapped_index, static_cast<uint16_t>(forwarded));
   }
 }
 
