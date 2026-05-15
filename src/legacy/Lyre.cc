@@ -1,6 +1,33 @@
 #include "userosc.h"
 #include "math.h"
+
+#ifdef __EMSCRIPTEN__
+namespace dsp {
+struct SimpleLFO {
+	float phase = 0.f;
+	float inc = 0.f;
+
+	void reset() {
+		phase = 0.f;
+	}
+
+	void setF0(float f0, float fs_recip) {
+		inc = f0 * fs_recip;
+	}
+
+	void cycle() {
+		phase += inc;
+		phase -= static_cast<float>(static_cast<uint32_t>(phase));
+	}
+
+	float sine_bi() const {
+		return sinf(6.283185307179586f * phase);
+	}
+};
+}  // namespace dsp
+#else
 #include "simplelfo.hpp"
+#endif
 
 #include "Lyre.hpp"
 
@@ -19,6 +46,24 @@ static uint8_t s_lfo_wave;
 static float s_param_z, s_param, s_paramB;
 static float s_lfoz;
 static const float s_fs_recip = 1.f / 48000.f;
+
+// FM depth response mode:
+// 0 = playable curved taper, 1 = exact mkI linear mapping (default).
+#ifndef LIRAH_FM_DEPTH_USE_MKI_LINEAR
+#define LIRAH_FM_DEPTH_USE_MKI_LINEAR 1
+#endif
+
+static inline float fm_depth_from_shape(uint16_t value) {
+#if LIRAH_FM_DEPTH_USE_MKI_LINEAR
+	return static_cast<float>(value) * 10.f;
+#else
+	const float norm = static_cast<float>(value) * (1.f / 1023.f);
+	// Quartic taper keeps 0-50% travel much cleaner while preserving full-scale at max.
+	const float norm2 = norm * norm;
+	const float curved = norm2 * norm2;
+	return curved * 10230.f;
+#endif
+}
 //lfo
 
 extern "C" {
@@ -159,7 +204,7 @@ void _hook_param(uint16_t index, uint16_t value) {
 	carrierOscillator.feedback = valf * 20.f;
 	break;	
    case 6:
-	carrierOscillator.fmDepth = value * 10;
+	carrierOscillator.fmDepth = fm_depth_from_shape(value);
     break;
   case 7:
     carrierOscillator.lfoDepth = valf;

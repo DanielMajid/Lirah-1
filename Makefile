@@ -9,7 +9,8 @@ SDK_TEMPLATE_MAKEFILE := $(SDK_PLATFORM_DIR)/$(if $(filter osc,$(MODULE)),dummy-
 SDK_GCC_BIN_PATH := $(LOGUE_SDK_DIR)/tools/gcc/gcc-arm-none-eabi-10.3-2021.10/bin
 SANDBOXDIR ?= $(abspath $(LOGUE_SDK_DIR)/websim)
 
-WASM_SRC := src/wasm.cc src/header.c \
+WASM_SRC := src/wasm.cc src/header.c src/unit.cc \
+	$(wildcard src/legacy/*.c) $(wildcard src/legacy/*.cc) $(wildcard src/legacy/*.cpp) \
 	$(wildcard $(LOGUE_SDK_DIR)/websim/dsp/*.c) $(wildcard $(LOGUE_SDK_DIR)/websim/dsp/*.cpp)
 
 ARM_GCC := $(shell command -v arm-none-eabi-gcc 2>/dev/null)

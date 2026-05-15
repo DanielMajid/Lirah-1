@@ -15,6 +15,15 @@
 extern "C" {
 #endif
 
+#ifdef __EMSCRIPTEN__
+typedef int32_t q31_t;
+
+static inline float q31_to_f32(q31_t q)
+{
+  return static_cast<float>(q) * 4.65661287307739e-10f;
+}
+#endif
+
 typedef struct user_osc_param {
   int32_t shape_lfo;
   uint16_t pitch;

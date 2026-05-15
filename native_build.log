@@ -1,0 +1,21 @@
+Compiler Options
+./logue-sdk/tools/gcc/gcc-arm-none-eabi-10.3-2021.10/bin/arm-none-eabi-gcc -c -mcpu=cortex-m7 -mthumb -mno-thumb-interwork -DTHUMB_NO_INTERWORKING -DTHUMB_PRESENT -g -Os -mlittle-endian -mfloat-abi=hard -mfpu=fpv4-sp-d16 -fsingle-precision-constant -fcheck-new -fPIC -std=c11 -fno-exceptions -W -Wall -Wextra -Wa,-alms=/Users/majid/repos/test_folder/Lirah-1/build/lst/ -DSTM32H725xE -DCORTEX_USE_FPU=TRUE -DARM_MATH_CM7 -D__FPU_PRESENT -I. -I./logue-sdk/platform/nts-1_mkii/common -I./logue-sdk/platform/ext/CMSIS/CMSIS/Include -I/Users/majid/repos/test_folder/Lirah-1/src -I/Users/majid/repos/test_folder/Lirah-1/src/legacy -I/Users/majid/repos/test_folder/Lirah-1/logue-sdk/platform/nts-1_mkii/common -I/Users/majid/repos/test_folder/Lirah-1/logue-sdk/platform/nts-1_mkii/common/dsp -I/Users/majid/repos/test_folder/Lyre-1-main
+
+Compiling header.c
+Compiling _unit_base.c
+Compiling unit.cc
+Compiling Lyre.cc
+Linking /Users/majid/repos/test_folder/Lirah-1/build/Lirah-1.elf
+./logue-sdk/tools/gcc/gcc-arm-none-eabi-10.3-2021.10/bin/arm-none-eabi-gcc /Users/majid/repos/test_folder/Lirah-1/build/obj/header.o /Users/majid/repos/test_folder/Lirah-1/build/obj/_unit_base.o /Users/majid/repos/test_folder/Lirah-1/build/obj/unit.o /Users/majid/repos/test_folder/Lirah-1/build/obj/Lyre.o -mcpu=cortex-m7 -mthumb -mno-thumb-interwork -DTHUMB_NO_INTERWORKING -DTHUMB_PRESENT -g -Os -mlittle-endian -mfloat-abi=hard -mfpu=fpv4-sp-d16 -fsingle-precision-constant -fcheck-new -nostartfiles -Wl,-z,max-page-size=128,-Map=/Users/majid/repos/test_folder/Lirah-1/build/Lirah-1.map,--cref,--no-warn-mismatch,--library-path=./logue-sdk/platform/nts-1_mkii/ld,--script=./logue-sdk/platform/nts-1_mkii/ld/unit.ld -shared --entry=0 -specs=nano.specs -specs=nosys.specs -lc -lm -o /Users/majid/repos/test_folder/Lirah-1/build/Lirah-1.elf
+Creating /Users/majid/repos/test_folder/Lirah-1/build/Lirah-1.hex
+Creating /Users/majid/repos/test_folder/Lirah-1/build/Lirah-1.bin
+Creating /Users/majid/repos/test_folder/Lirah-1/build/Lirah-1.dmp
+
+   text	   data	    bss	    dec	    hex	filename
+   4864	    236	    392	   5492	   1574	/Users/majid/repos/test_folder/Lirah-1/build/Lirah-1.elf
+
+Creating /Users/majid/repos/test_folder/Lirah-1/build/Lirah-1.list
+Making /Users/majid/repos/test_folder/Lirah-1/build/Lirah-1.nts1mkiiunit
+Deploying to /Users/majid/repos/test_folder/Lirah-1/Lirah-1.nts1mkiiunit
+Done
+

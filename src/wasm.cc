@@ -4,26 +4,126 @@
 #include <emscripten/bind.h>
 #include <emscripten/webaudio.h>
 #include <emscripten/em_math.h>
+#include <algorithm>
+#include <array>
+#include <cassert>
+#include <cmath>
+#include <cstdint>
+#include <cstdio>
+#include <string>
+#include <vector>
+
 using namespace emscripten;
-#include "osc.h"
+
+#include "unit.h"
+#include "unit_osc.h"
 
 // this needs to be big enough for the stereo output, inputs, params and the worker stack
 uint8_t audioThreadStack[4096];
 
 constexpr int SAMPLE_RATE = 48000;
 constexpr int WEB_AUDIO_FRAME_SIZE = 128;
-std::vector<float> ram;
 std::array<float, WEB_AUDIO_FRAME_SIZE> interleavedOut;
 
-Osc processor; // dsp processor instance
 extern const unit_header_t unit_header;
 
 static float BPM_WASM = 120.f;
 
+namespace {
+
+unit_runtime_osc_context_t runtime_osc_context = {};
+unit_runtime_desc_t runtime_desc = {};
+bool unit_initialized = false;
+
+uint16_t current_pitch = static_cast<uint16_t>(69U << 8);
+
+// Envelope generator to simulate platform shape_lfo modulation
+// This varies over time to dampen FM effect, matching hardware behavior
+static uint32_t envelope_sample_counter = 0;
+static constexpr uint32_t ENVELOPE_PERIOD_SAMPLES = 96000;  // ~2 seconds at 48kHz
+
+void update_shape_lfo_envelope() {
+  // Generate a slow triangular wave that dampens the FM effect
+  // Range: -0.5 to 0.5 (will be used as lfoShape multiplier)
+  float phase = static_cast<float>(envelope_sample_counter) / static_cast<float>(ENVELOPE_PERIOD_SAMPLES);
+  phase = phase - static_cast<float>(static_cast<int>(phase));  // wrap to 0-1
+  
+  float envelope;
+  if (phase < 0.5f) {
+    envelope = phase * 2.f - 0.5f;  // 0 -> 0.5: -0.5 -> +0.5
+  } else {
+    envelope = (1.f - phase) * 2.f - 0.5f;  // 0.5 -> 1: +0.5 -> -0.5
+  }
+  
+  // Convert to q31 fixed point (-1.0 to +1.0 range)
+  runtime_osc_context.shape_lfo = static_cast<int32_t>(envelope * static_cast<float>(0x7FFFFFFF));
+  envelope_sample_counter += WEB_AUDIO_FRAME_SIZE;
+}
+
+void set_runtime_pitch_from_hz(float hz)
+{
+  if (hz <= 0.f) {
+    return;
+  }
+
+  float midi = 69.f + 12.f * std::log2(hz / 440.f);
+  midi = std::clamp(midi, 0.f, 127.996f);
+
+  int note = static_cast<int>(std::floor(midi));
+  int frac = static_cast<int>((midi - static_cast<float>(note)) * 256.f + 0.5f);
+  if (frac > 255) {
+    frac = 0;
+    note = std::min(note + 1, 127);
+  }
+
+  current_pitch = static_cast<uint16_t>((note << 8) | frac);
+  runtime_osc_context.pitch = current_pitch;
+}
+
+void initialize_unit_runtime(uint32_t sample_rate)
+{
+  if (unit_initialized) {
+    return;
+  }
+
+  runtime_osc_context.shape_lfo = 0;
+  runtime_osc_context.pitch = current_pitch;
+  runtime_osc_context.cutoff = 0;
+  runtime_osc_context.resonance = 0;
+  runtime_osc_context.amp_eg_phase = 0;
+  runtime_osc_context.amp_eg_state = 0;
+  runtime_osc_context.notify_input_usage = nullptr;
+
+  runtime_desc.target = unit_header.target;
+  runtime_desc.api = UNIT_API_VERSION;
+  runtime_desc.samplerate = sample_rate;
+  runtime_desc.frames_per_buffer = WEB_AUDIO_FRAME_SIZE;
+  runtime_desc.input_channels = 2;
+  runtime_desc.output_channels = 1;
+  runtime_desc.hooks.runtime_context = reinterpret_cast<const unit_runtime_base_context_t *>(&runtime_osc_context);
+  runtime_desc.hooks.sdram_alloc = nullptr;
+  runtime_desc.hooks.sdram_free = nullptr;
+  runtime_desc.hooks.sdram_avail = nullptr;
+
+  const int8_t init_result = unit_init(&runtime_desc);
+  if (init_result != k_unit_err_none) {
+    std::printf("unit_init failed: %d\n", static_cast<int>(init_result));
+    return;
+  }
+
+  unit_reset();
+  unit_resume();
+  unit_initialized = true;
+}
+
+}  // namespace
+
 void fx_set_bpm(float bpm)
 {
   BPM_WASM = bpm;
-  processor.setTempo(bpm);
+  if (unit_initialized) {
+    unit_set_tempo(static_cast<uint32_t>(bpm * 65536.f));
+  }
 }
 
 uint16_t fx_get_bpm(void)
@@ -89,7 +189,10 @@ std::string getParameterValueString(int index, int value)
   case k_unit_param_type_enum:
     break;
   case k_unit_param_type_strings:
-    return processor.getParameterStrValue(index, value);
+    {
+      const char *param_text = unit_get_param_str_value(static_cast<uint8_t>(index), value);
+      return param_text ? std::string(param_text) : std::string();
+    }
     break;
   case k_unit_param_type_drywet:
     suffix = "%";
@@ -164,19 +267,25 @@ std::vector<AudioWorkletParameter> getValidParameters()
 
 void setOscPitch(float f0)
 {
-  processor.setPitch(f0 / static_cast<float>(SAMPLE_RATE));
+  set_runtime_pitch_from_hz(f0);
 }
 
 void noteOn(uint8_t note, uint8_t velocity)
 {
-  processor.noteOn(note, velocity);
+  current_pitch = static_cast<uint16_t>(note) << 8;
+  runtime_osc_context.pitch = current_pitch;
+  if (unit_initialized) {
+    unit_note_on(note, velocity);
+  }
   // printf("Note On: %d, velocity %d\n", note, velocity);
 }
 
 // note off velocity is not supported by logue-sdk
 void noteOff(uint8_t note)
 {
-  processor.noteOff(note);
+  if (unit_initialized) {
+    unit_note_off(note);
+  }
   // printf("Note Off: %d\n", note);
 }
 
@@ -217,22 +326,18 @@ bool ProcessAudio(int numInputs, const AudioSampleFrame *inputs,
   assert(outputs->samplesPerChannel == WEB_AUDIO_FRAME_SIZE);
   auto &output = outputs[0];
 
-  // // interleave input buffer (mono -> stereo)
-  // for (int i = 0; i < WEB_AUDIO_FRAME_SIZE; ++i)
-  // {
-  //   interleavedIn[2 * i] = input.data[i];
-  //   interleavedIn[2 * i + 1] = (inputs->numberOfChannels == 1) ? input.data[i] : input.data[i + WEB_AUDIO_FRAME_SIZE];
-  // }
-
   for (int i = 0; i < numParams; ++i)
   {
     // K-rate parameter: use the first sample for the frame
-    float value = params[i].data[0];
-    processor.setParameter(i, value);
+    const float value = params[i].data[0];
+    unit_set_param_value(static_cast<uint8_t>(i), static_cast<int32_t>(std::lround(value)));
   }
 
+  // Update shape_lfo envelope to simulate platform modulation
+  update_shape_lfo_envelope();
+
   // emscripten_log(EM_LOG_CONSOLE, "bpm=%d", fx_get_bpmf());
-  processor.process(nullptr, interleavedOut.data(), WEB_AUDIO_FRAME_SIZE);
+  unit_render(nullptr, interleavedOut.data(), WEB_AUDIO_FRAME_SIZE);
 
   // de-interleave output buffer
   for (int i = 0; i < WEB_AUDIO_FRAME_SIZE; ++i)
@@ -246,9 +351,6 @@ void AudioWorkletProcessorCreated(EMSCRIPTEN_WEBAUDIO_T audioContext, bool succe
 {
   if (!success)
     return; // Check browser console in a debug build for detailed errors
-
-  ram.resize(processor.getBufferSize());
-  processor.init(ram.data());
 
   // no input, single mono output
   int outputChannelCounts[1] = {1};
@@ -267,6 +369,11 @@ void AudioThreadInitialized(EMSCRIPTEN_WEBAUDIO_T audioContext, bool success, vo
 {
   if (!success)
     return; // Check browser console in a debug build for detailed errors
+
+  initialize_unit_runtime(static_cast<uint32_t>(emscripten_audio_context_sample_rate(audioContext)));
+  if (!unit_initialized) {
+    return;
+  }
 
   auto valid_parameters = getValidParameters();
 

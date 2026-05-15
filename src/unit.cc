@@ -102,6 +102,14 @@ __unit_callback int8_t unit_init(const unit_runtime_desc_t *desc) {
     return k_unit_err_api_version;
   }
 
+  if (desc->samplerate != k_samplerate) {
+    return k_unit_err_samplerate;
+  }
+
+  if (desc->input_channels != 2 || desc->output_channels != 1) {
+    return k_unit_err_geometry;
+  }
+
   runtime_context = static_cast<const unit_runtime_osc_context_t *>(desc->hooks.runtime_context);
   _hook_init(desc->target, desc->api);
 
@@ -157,15 +165,8 @@ __unit_callback void unit_set_param_value(uint8_t id, int32_t value) {
   }
 
   if (mapped_index != 0xFFFF) {
-    int32_t forwarded = value;
-
-    // Legacy indices 2 and 5 are normalized via param_val_to_f32(value),
-    // so map 0..100 UI values to 0..1023 before forwarding.
-    if (mapped_index == 2 || mapped_index == 5) {
-      forwarded = (forwarded * 1023 + 50) / 100;
-    }
-
-    _hook_param(mapped_index, static_cast<uint16_t>(forwarded));
+    // Forward raw clamped UI values to preserve original mkI parameter behavior.
+    _hook_param(mapped_index, static_cast<uint16_t>(value));
   }
 }
 

@@ -22,7 +22,6 @@ UDEFS =
 # Local mkI osc compatibility shim uses mkII common headers.
 UINCDIR += $(abspath $(TOOLSDIR)/../platform/nts-1_mkii/common)
 UINCDIR += $(abspath $(TOOLSDIR)/../platform/nts-1_mkii/common/dsp)
-UINCDIR += /Users/majid/repos/test_folder/Lyre-1-main
 
 # Override WASM sandbox path to point to logue-sdk/websim
 SANDBOXDIR ?= $(abspath $(PROJECT_ROOT)/logue-sdk/websim)
