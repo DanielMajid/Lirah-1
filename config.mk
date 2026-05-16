@@ -1,27 +1,48 @@
-# Build configuration for NTS-1 mkII user unit.
-# Uses Make wildcards to auto-discover legacy source files in src/legacy/
+##############################################################################
+# Configuration for Makefile
+#
 
 PROJECT := Lirah-1
 PROJECT_TYPE := osc
 
-# Auto-compile all C/C++ files in src/legacy/ to avoid manual config updates
-UCSRC = src/header.c $(wildcard src/legacy/*.c)
-UCXXSRC = src/unit.cc $(wildcard src/legacy/*.cc) $(wildcard src/legacy/*.cpp)
-UWASMCXXSRC = src/wasm.cc
+##############################################################################
+# Sources
+#
 
-UASMSRC =
-UASMXSRC =
+# C sources 
+UCSRC = header.c
 
-UINCDIR = \
-  $(PROJECT_ROOT)/src \
-  $(PROJECT_ROOT)/src/legacy
+# C++ sources 
+UCXXSRC = unit.cc
 
-ULIBS = -lm
-UDEFS =
+# List ASM source files here
+UASMSRC = 
 
-# Local mkI osc compatibility shim uses mkII common headers.
-UINCDIR += $(abspath $(TOOLSDIR)/../platform/nts-1_mkii/common)
-UINCDIR += $(abspath $(TOOLSDIR)/../platform/nts-1_mkii/common/dsp)
+UASMXSRC = 
 
-# Override WASM sandbox path to point to logue-sdk/websim
-SANDBOXDIR ?= $(abspath $(PROJECT_ROOT)/logue-sdk/websim)
+##############################################################################
+# Include Paths
+#
+
+UINCDIR  = $(PROJECT_ROOT) \
+            $(PROJECT_ROOT)/logue-sdk/platform/nts-1_mkii/common \
+            $(PROJECT_ROOT)/logue-sdk/platform/common
+
+##############################################################################
+# Library Paths
+#
+
+ULIBDIR = 
+
+##############################################################################
+# Libraries
+#
+
+ULIBS  = -lm
+
+##############################################################################
+# Macros
+#
+
+UDEFS = 
+

@@ -1,75 +1,266 @@
-PROJECT ?= Lirah-1
-MODULE ?= osc
-VERSION ?= 1.0.2
+##############################################################################
+# Common project definitions
+#
 
-LOGUE_SDK_DIR ?= ./logue-sdk
+MKFILE_PATH := $(realpath $(lastword $(MAKEFILE_LIST)))
 
-SDK_PLATFORM_DIR := $(LOGUE_SDK_DIR)/platform/nts-1_mkii
-SDK_TEMPLATE_MAKEFILE := $(SDK_PLATFORM_DIR)/$(if $(filter osc,$(MODULE)),dummy-osc,$(if $(filter modfx,$(MODULE)),dummy-modfx,$(if $(filter delfx,$(MODULE)),dummy-delfx,dummy-revfx)))/Makefile
-SDK_GCC_BIN_PATH := $(LOGUE_SDK_DIR)/tools/gcc/gcc-arm-none-eabi-10.3-2021.10/bin
-SANDBOXDIR ?= $(abspath $(LOGUE_SDK_DIR)/websim)
+# Project root
+PROJECT_ROOT ?= $(dir $(MKFILE_PATH))
 
-WASM_SRC := src/wasm.cc src/header.c src/unit.cc \
-	$(wildcard src/legacy/*.c) $(wildcard src/legacy/*.cc) $(wildcard src/legacy/*.cpp) \
-	$(wildcard $(LOGUE_SDK_DIR)/websim/dsp/*.c) $(wildcard $(LOGUE_SDK_DIR)/websim/dsp/*.cpp)
+# Common includes
+COMMON_INC_PATH ?= $(realpath $(PROJECT_ROOT)/logue-sdk/platform/nts-1_mkii/common/)
 
-ARM_GCC := $(shell command -v arm-none-eabi-gcc 2>/dev/null)
-ARM_GCC_BIN_PATH := $(patsubst %/,%,$(dir $(ARM_GCC)))
+# Common sources
+COMMON_SRC_PATH ?= $(realpath $(PROJECT_ROOT)/logue-sdk/platform/nts-1_mkii/common/)
 
-UNIT_FILE := $(PROJECT).nts1mkiiunit
-PACKAGE := $(PROJECT)-$(VERSION).zip
+# Installation directory
+INSTALLDIR ?= $(PROJECT_ROOT)
 
-SDK_MAKE_ARGS := \
-  PROJECT_ROOT=$(CURDIR) \
-  COMMON_INC_PATH=$(SDK_PLATFORM_DIR)/common \
-  COMMON_SRC_PATH=$(SDK_PLATFORM_DIR)/common \
-  TOOLSDIR=$(LOGUE_SDK_DIR)/tools \
-  EXTDIR=$(LOGUE_SDK_DIR)/platform/ext \
-  CMSISDIR=$(LOGUE_SDK_DIR)/platform/ext/CMSIS/CMSIS \
-  LDDIR=$(SDK_PLATFORM_DIR)/ld \
-  INSTALLDIR=$(CURDIR)
+# Tools directory
+TOOLSDIR ?= $(PROJECT_ROOT)/logue-sdk/tools
 
-ifeq ($(wildcard $(SDK_GCC_BIN_PATH)/arm-none-eabi-gcc),)
-ifneq ($(ARM_GCC),)
-SDK_MAKE_ARGS += GCC_BIN_PATH=$(ARM_GCC_BIN_PATH)
-endif
-endif
+# External library directory
+EXTDIR ?= $(PROJECT_ROOT)/logue-sdk/platform/ext
 
-.PHONY: all install clean package check-sdk
-check-sdk:
-	@if [ ! -f "$(SDK_TEMPLATE_MAKEFILE)" ]; then \
-	  echo "Error: SDK template not found: $(SDK_TEMPLATE_MAKEFILE)"; \
-	  echo "Set LOGUE_SDK_DIR to your local logue-sdk path."; \
-	  exit 1; \
-	fi
+# CMSIS library location
+CMSISDIR ?= $(EXTDIR)/CMSIS/CMSIS
 
-all: check-sdk
-	@$(MAKE) -f "$(SDK_TEMPLATE_MAKEFILE)" $(SDK_MAKE_ARGS) all
+# Linker scripts location
+LDDIR ?= $(PROJECT_ROOT)/logue-sdk/platform/nts-1_mkii/ld
 
-install: check-sdk
-	@$(MAKE) -f "$(SDK_TEMPLATE_MAKEFILE)" $(SDK_MAKE_ARGS) install
+##############################################################################
+# Include custom project configuration and sources
+#
+
+include config.mk
+
+##############################################################################
+# Common defaults
+#
+
+# Define project name here
+PROJECT ?= Lirah-2
+
+##############################################################################
+# Setup cross compilation
+#
+
+MCU := cortex-m7
+
+MCU_MODEL := STM32H725xE
+
+GCC_TARGET := arm-none-eabi-
+GCC_BIN_PATH ?= $(TOOLSDIR)/gcc/gcc-arm-none-eabi-10.3-2021.10/bin
+
+CC    := $(GCC_BIN_PATH)/$(GCC_TARGET)gcc
+CXXC  := $(GCC_BIN_PATH)/$(GCC_TARGET)g++
+LD    := $(GCC_BIN_PATH)/$(GCC_TARGET)gcc
+#LD   := $(GCC_BIN_PATH)/$(GCC_TARGET)g++
+CP    := $(GCC_BIN_PATH)/$(GCC_TARGET)objcopy
+AS    := $(GCC_BIN_PATH)/$(GCC_TARGET)gcc -x assembler-with-cpp
+AR    := $(GCC_BIN_PATH)/$(GCC_TARGET)ar
+OD    := $(GCC_BIN_PATH)/$(GCC_TARGET)objdump
+SZ    := $(GCC_BIN_PATH)/$(GCC_TARGET)size
+STRIP := $(GCC_BIN_PATH)/$(GCC_TARGET)strip
+
+HEX   := $(CP) -O ihex
+BIN   := $(CP) -O binary
+
+RULESPATH := $(LDDIR)
+LDSCRIPT := $(LDDIR)/unit.ld
+DLIBS := -lc
+
+DADEFS := -D$(MCU_MODEL) -DCORTEX_USE_FPU=TRUE -DARM_MATH_CM7
+DDEFS := -D$(MCU_MODEL) -DCORTEX_USE_FPU=TRUE -DARM_MATH_CM7 -D__FPU_PRESENT
+
+COPT := -fPIC -std=c11 -fno-exceptions
+CXXOPT := -fPIC -fno-use-cxa-atexit -std=c++11 -fno-rtti -fno-exceptions -fno-non-call-exceptions
+
+LDOPT := -shared --entry=0 -specs=nano.specs -specs=nosys.specs
+
+CWARN := -W -Wall -Wextra
+CXXWARN :=
+
+FPU_OPTS := -mfloat-abi=hard -mfpu=fpv4-sp-d16 -fsingle-precision-constant -fcheck-new
+
+OPT := -g -Os -mlittle-endian 
+OPT += $(FPU_OPTS)
+
+## TODO: there seems to be a bug or some yet unknown behavior that breaks PLT code for external calls when LTO is enabled alongside -nostartfiles
+#OPT += -flto
+
+TOPT := -mthumb -mno-thumb-interwork -DTHUMB_NO_INTERWORKING -DTHUMB_PRESENT
+
+##############################################################################
+# Set compilation targets and directories
+#
+
+PRODUCT := $(PROJECT).nts1mkiiunit
+
+BUILDDIR := $(PROJECT_ROOT)/build
+OBJDIR := $(BUILDDIR)/obj
+LSTDIR := $(BUILDDIR)/lst
+
+ASMSRC := $(UASMSRC)
+
+ASMXSRC := $(UASMXSRC)
+
+CSRC := $(UCSRC)
+CSRC += $(realpath $(COMMON_SRC_PATH)/_unit_base.c)
+
+CXXSRC := $(UCXXSRC)
+
+vpath %.s $(sort $(dir $(ASMSRC)))
+vpath %.S $(sort $(dir $(ASMXSRC)))
+vpath %.c $(sort $(dir $(CSRC)))
+vpath %.cc $(sort $(dir $(CXXSRC)))
+
+ASMOBJS := $(addprefix $(OBJDIR)/, $(notdir $(ASMSRC:.s=.o)))
+ASMXOBJS := $(addprefix $(OBJDIR)/, $(notdir $(ASMXSRC:.S=.o)))
+COBJS := $(addprefix $(OBJDIR)/, $(notdir $(CSRC:.c=.o)))
+CXXOBJS := $(addprefix $(OBJDIR)/, $(notdir $(CXXSRC:.cc=.o)))
+
+OBJS := $(ASMXOBJS) $(ASMOBJS) $(COBJS) $(CXXOBJS)
+
+DINCDIR := $(COMMON_INC_PATH) \
+           $(CMSISDIR)/Include
+
+INCDIR := $(patsubst %,-I%,$(DINCDIR) $(UINCDIR))
+
+DEFS := $(DDEFS) $(UDEFS)
+ADEFS := $(DADEFS) $(UADEFS)
+
+LIBS := $(DLIBS) $(ULIBS)
+
+LIBDIR := $(patsubst %,-I%,$(DLIBDIR) $(ULIBDIR))
+
+##############################################################################
+# WebAssembly compiler and binding tools
+#
+SANDBOXDIR ?= $(PROJECT_ROOT)/logue-sdk/websim
+WASMSRC := wasm.cc $(UCSRC) $(UCXXSRC) $(wildcard $(SANDBOXDIR)/dsp/*.c) $(wildcard $(SANDBOXDIR)/dsp/*.cpp)
+WASMDIR := $(PROJECT_ROOT)/sim
+DINCDIR += $(TOOLSDIR)/emsdk/upstream/emscripten/system/include
+EMCC_BIN_PATH := $(TOOLSDIR)/emsdk/upstream/emscripten
+
+##############################################################################
+# Compiler flags
+#
+
+MCFLAGS   := -mcpu=$(MCU)
+ODFLAGS	  := -x --syms
+ASFLAGS   = $(MCFLAGS) -g $(TOPT) -Wa,-alms=$(LSTDIR)/$(notdir $(<:.s=.lst)) $(ADEFS)
+ASXFLAGS  = $(MCFLAGS) -g $(TOPT) -Wa,-alms=$(LSTDIR)/$(notdir $(<:.S=.lst)) $(ADEFS)
+CFLAGS    = $(MCFLAGS) $(TOPT) $(OPT) $(COPT) $(CWARN) -Wa,-alms=$(LSTDIR)/$(notdir $(<:.c=.lst)) $(DEFS)
+CXXFLAGS  = $(MCFLAGS) $(TOPT) $(OPT) $(CXXOPT) $(CXXWARN) -Wa,-alms=$(LSTDIR)/$(notdir $(<:.cc=.lst)) $(DEFS)
+LDFLAGS   := $(MCFLAGS) $(TOPT) $(OPT) -nostartfiles $(LIBDIR) -Wl,-z,max-page-size=128,-Map=$(BUILDDIR)/$(PROJECT).map,--cref,--no-warn-mismatch,--library-path=$(RULESPATH),--script=$(LDSCRIPT) $(LDOPT)
+
+OUTFILES := $(BUILDDIR)/$(PROJECT).elf \
+	    $(BUILDDIR)/$(PROJECT).hex \
+	    $(BUILDDIR)/$(PROJECT).bin \
+	    $(BUILDDIR)/$(PROJECT).dmp \
+	    $(BUILDDIR)/$(PROJECT).list
+
+##############################################################################
+# Targets
+#
+
+all: PRE_ALL $(OBJS) $(OUTFILES) POST_ALL
+	@echo Done
+	@echo
+
+PRE_ALL:
+
+POST_ALL:
+
+$(OBJS): | $(BUILDDIR) $(OBJDIR) $(LSTDIR)
+
+$(BUILDDIR):
+	@echo Compiler Options
+	@echo $(CC) -c $(CFLAGS) -I. $(INCDIR)
+	@echo
+	@mkdir -p $(BUILDDIR)
+
+$(OBJDIR):
+	@mkdir -p $(OBJDIR)
+
+$(LSTDIR):
+	@mkdir -p $(LSTDIR)
+
+$(ASMOBJS) : $(OBJDIR)/%.o : %.s Makefile
+	@echo Assembling $(<F)
+	@$(AS) -c $(ASFLAGS) -I. $(INCDIR) $< -o $@
+
+$(ASMXOBJS) : $(OBJDIR)/%.o : %.S Makefile
+	@echo Assembling $(<F)
+	@$(CC) -c $(ASXFLAGS) -I. $(INCDIR) $< -o $@
+
+$(COBJS) : $(OBJDIR)/%.o : %.c Makefile
+	@echo Compiling $(<F)
+	@$(CC) -c $(CFLAGS) -I. $(INCDIR) $< -o $@
+
+$(CXXOBJS) : $(OBJDIR)/%.o : %.cc Makefile
+	@echo Compiling $(<F)
+	@$(CXXC) -c $(CXXFLAGS) -I. $(INCDIR) $< -o $@
+
+$(BUILDDIR)/%.elf: $(OBJS) $(LDSCRIPT)
+	@echo Linking $@
+	@echo $(LD) $(OBJS) $(LDFLAGS) $(LIBS) -o $@
+	@$(LD) $(OBJS) $(LDFLAGS) $(LIBS) -o $@
+
+%.hex: %.elf
+	@echo Creating $@
+	@$(HEX) $< $@
+
+%.bin: %.elf
+	@echo Creating $@
+	@$(BIN) $< $@
+
+%.dmp: %.elf
+	@echo Creating $@
+	@$(OD) $(ODFLAGS) $< > $@
+	@echo
+	@$(SZ) $<
+	@echo
+
+%.list: %.elf
+	@echo Creating $@
+	@$(OD) -S $< > $@
 
 clean:
-	@if [ -f "$(SDK_TEMPLATE_MAKEFILE)" ]; then \
-	  $(MAKE) -f "$(SDK_TEMPLATE_MAKEFILE)" $(SDK_MAKE_ARGS) clean; \
-	else \
-	  echo "Skipping SDK clean (template Makefile not found)."; \
-	fi
-	@rm -f "$(PACKAGE)"
-
-package: install
-	@echo Packaging $(UNIT_FILE) -\> $(PACKAGE)
-	@rm -f "$(PACKAGE)"
-	@if [ -f src/credits.txt ]; then \
-	  zip -q9 "$(PACKAGE)" "$(UNIT_FILE)" src/credits.txt; \
-	else \
-	  zip -q9 "$(PACKAGE)" "$(UNIT_FILE)"; \
-	fi
+	@echo Cleaning
+	-rm -fR $(PROJECT_ROOT)/.dep $(BUILDDIR) $(PROJECT_ROOT)/$(PRODUCT) $(WASMDIR)
 	@echo Done
+	@echo
 
-.PHONY: wasm
-wasm: check-sdk
-	@$(MAKE) -f "$(SDK_TEMPLATE_MAKEFILE)" $(SDK_MAKE_ARGS) \
-	  SANDBOXDIR="$(SANDBOXDIR)" \
-	  WASMSRC="$(WASM_SRC)" \
-	  wasm
+$(BUILDDIR)/$(PRODUCT): | $(OBJS) $(OUTFILES)
+	@echo Making $(BUILDDIR)/$(PRODUCT)
+	@cp -a $(BUILDDIR)/$(PROJECT).elf $(BUILDDIR)/$(PRODUCT)
+	@$(STRIP) $(BUILDDIR)/$(PRODUCT)
+
+install: $(BUILDDIR)/$(PRODUCT)
+	@echo Deploying to $(INSTALLDIR)/$(PRODUCT)
+	@mv $(BUILDDIR)/$(PRODUCT) $(INSTALLDIR)/$(PRODUCT)
+	@echo Done
+	@echo
+
+wasm:
+	@echo Building WebAssembly audio processor
+	@mkdir -p $(WASMDIR)
+	@cp -r $(SANDBOXDIR)/samples $(WASMDIR)/
+	@cp -r $(SANDBOXDIR)/scripts $(WASMDIR)/
+	@cp -r $(SANDBOXDIR)/images $(WASMDIR)/
+	@cp -r $(WASMSRC) $(WASMDIR)/
+	@$(EMCC_BIN_PATH)/emcc -Wno-unknown-attributes -Wno-limited-postlink-optimizations $(INCDIR) \
+		-s AUDIO_WORKLET=1 \
+		-s WASM_WORKERS=1 \
+		-lembind \
+		--shell-file $(SANDBOXDIR)/osc.html \
+		--emrun \
+		-O2 \
+		-g -fdebug-compilation-dir='..' \
+		$(WASMSRC) \
+		-o $(WASMDIR)/$(PROJECT).html
+	@echo Done
+	@echo Opening the sandbox
+	@$(EMCC_BIN_PATH)/emrun --browser chrome --serve_after_close $(WASMDIR)/$(PROJECT).html
