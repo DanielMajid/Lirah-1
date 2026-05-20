@@ -39,13 +39,14 @@
  */
 
 #include "osc.h"
-#include "unit_osc.h"       // base definitions for osc units
-#include "utils/int_math.h" // clipminmaxi32()
-// #include <algorithm>        // std::fill
+#include "unit_osc.h"       // Runtime-facing oscillator unit definitions
+#include "utils/int_math.h" // Integer clamp helper
 
-static Osc s_osc_instance; // Note: In this example, actual instance of custom osc object.
+// Single DSP instance used by runtime callbacks.
+static Osc s_osc_instance;
 
-static int32_t cached_values[UNIT_OSC_MAX_PARAM_COUNT]; // cached parameter values passed from hardware
+// Runtime asks for current values, so we mirror the latest parameter values here.
+static int32_t cached_values[UNIT_OSC_MAX_PARAM_COUNT];
 
 static const unit_runtime_osc_context_t *context;
 
@@ -60,27 +61,26 @@ __unit_callback int8_t unit_init(const unit_runtime_desc_t *desc)
   if (!desc)
     return k_unit_err_undef;
 
-  // Note: make sure the unit is being loaded to the correct platform/module target
+  // Reject loading if the module type/platform does not match this binary.
   if (desc->target != unit_header.target)
     return k_unit_err_target;
 
-  // Note: check API compatibility with the one this unit was built against
+  // Reject loading on incompatible runtime API versions.
   if (!UNIT_API_IS_COMPAT(desc->api))
     return k_unit_err_api_version;
 
-  // Check compatibility of samplerate with unit
+  // This unit expects the sample rate returned by the DSP base class.
   if (desc->samplerate != s_osc_instance.getSampleRate())
     return k_unit_err_samplerate;
 
-  // Check compatibility of frame geometry
-  // note: NTS-1 mkII oscillators can make use of the audio input depending on the routing options in global settings, see product documentation for details.
-  if (desc->input_channels != 2 || desc->output_channels != 1) // should be stereo input / mono output
+  // Geometry check: runtime provides stereo input and expects mono oscillator output.
+  if (desc->input_channels != 2 || desc->output_channels != 1)
     return k_unit_err_geometry;
 
-  // cache the context for later use
+  // Save runtime context pointer for pitch and shape_lfo access during render.
   context = static_cast<const unit_runtime_osc_context_t *>(desc->hooks.runtime_context);
 
-  // initialize cached parameters to defaults
+  // Start cache with the defaults declared in header.c.
   for (int id = 0; id < UNIT_OSC_MAX_PARAM_COUNT; ++id)
   {
     cached_values[id] = static_cast<int32_t>(unit_header.params[id].init);
@@ -118,10 +118,10 @@ __unit_callback void unit_render(const float *in, float *out, uint32_t frames)
 
 __unit_callback void unit_set_param_value(uint8_t id, int32_t value)
 {
-  // clip to valid range as defined in header
+  // Clamp to the valid range from the parameter table.
   value = clipminmaxi32(unit_header.params[id].min, value, unit_header.params[id].max);
 
-  // cache value for unit_get_param_value(id)
+  // Keep runtime cache in sync.
   cached_values[id] = value;
 
   s_osc_instance.setParameter(id, value);
@@ -129,13 +129,14 @@ __unit_callback void unit_set_param_value(uint8_t id, int32_t value)
 
 __unit_callback int32_t unit_get_param_value(uint8_t id)
 {
-  // just return the cached value
+  // Runtime-side readback uses this cache.
   return cached_values[id];
 }
 
 __unit_callback const char *unit_get_param_str_value(uint8_t id, int32_t value)
 {
-  value = clipminmaxi32(unit_header.params[id].min, value, unit_header.params[id].max); // just in case
+  // Clamp first, then ask the DSP for optional string formatting.
+  value = clipminmaxi32(unit_header.params[id].min, value, unit_header.params[id].max);
   return s_osc_instance.getParameterStrValue(id, value);
 }
 

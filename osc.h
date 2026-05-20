@@ -37,8 +37,7 @@
  *
  *  Lirah-1 — Lyra-8 style oscillator for NTS-1 mkII.
  *
- *  Ported from Lyre-1 (jamesdcheetham) originally written for the NTS-1 mki.
- *
+ *  
  *  Signal path:
  *    - Two independent sine LFOs form a "hyper LFO": their output is
  *      AND-gated (positive half only) and used to pitch-modulate both
@@ -52,6 +51,7 @@
 
 #include "processor.h"
 #include "unit_osc.h"
+#include <cstdio>
 
 class Osc : public Processor
 {
@@ -59,9 +59,8 @@ public:
   // NTS-1 mkII oscillators do not support SDRAM allocation.
   uint32_t getBufferSize() const override final { return 0; }
 
-  // ---- Parameter indices -------------------------------------------------------
-  // Indices 0 and 1 correspond to the physical SHAPE (knob A) and ALT (knob B)
-  // controls. Indices 2-7 are the edit-menu parameters shown on the device screen.
+  // Parameter index map.
+  // 0-1: front panel knobs. 2-9: edit menu parameters.
   enum
   {
     SHAPE     = 0U, // FM DEPTH   — knob A (0-1023)
@@ -72,12 +71,26 @@ public:
     MOD_TUNE  = 5U, // FM TUNE    — edit menu (0-100 → 0 to +1 octave)
     OSC_TUNE  = 6U, // PITCH      — edit menu (0-100 → 0 to +1 octave)
     FEEDBACK  = 7U, // FEEDBACK   — edit menu (0-100 → 0-2x)
+    LFO3_TARGET = 8U, // LFO 3 TARGET — selectable modulation destination
+    LFO3_RATE   = 9U, // LFO 3 RATE   — modulation speed (0-100 -> 0-10 Hz)
     NUM_PARAMS
   };
 
-  // ---- DSP parameter block ----------------------------------------------------
-  // All values are stored pre-scaled so the audio loop does minimal work.
-  // Note: defaults here must match init() and the header.c init fields.
+  enum Lfo3Target
+  {
+    k_lfo3_target_off = 0,
+    k_lfo3_target_fm_depth,
+    k_lfo3_target_hyper_depth,
+    k_lfo3_target_hyper_rate1,
+    k_lfo3_target_hyper_rate2,
+    k_lfo3_target_fold,
+    k_lfo3_target_mod_tune,
+    k_lfo3_target_osc_tune,
+    k_lfo3_target_feedback,
+  };
+
+  // Parameter block used by the audio loop.
+  // Values are pre-scaled where possible to keep per-sample work light.
   struct Params
   {
     float fmDepth;  // FM modulation depth (0 to ~2046); scaled for better playability
@@ -85,9 +98,11 @@ public:
     float lfoRate1; // LFO 1 frequency in Hz (0..10)
     float lfoRate2; // LFO 2 frequency in Hz (0..10)
     float waveFold; // Wave folder amplitude scalar (0..10); added to 1 before multiply
-    int32_t modTune;// Modulator semitone offset (0-100 = 0 to +1 octave, linear approx)
-    int32_t oscTune;// Carrier semitone offset   (0-100 = 0 to +1 octave, linear approx)
+    int32_t modTune;// Modulator tune amount (0-100 -> 1.0x to 2.0x frequency multiplier)
+    int32_t oscTune;// Carrier tune amount   (0-100 -> 1.0x to 2.0x frequency multiplier)
     float feedback; // FM feedback scalar (0..2); multiplies prev sample back into output
+    uint8_t lfo3Target; // LFO 3 modulation destination selector
+    float lfo3Rate; // LFO 3 frequency in Hz (0..10)
 
     void reset()
     {
@@ -99,12 +114,14 @@ public:
       modTune  = 0;
       oscTune  = 0;
       feedback = 0.f;
+      lfo3Target = k_lfo3_target_off;
+      lfo3Rate = 0.f;
     }
 
     Params() { reset(); }
   };
 
-  // ---- Parameter setter -------------------------------------------------------
+  // Convert UI parameter values into DSP-friendly values.
   void setParameter(uint8_t index, int32_t value) override final
   {
     switch (index)
@@ -120,7 +137,7 @@ public:
       break;
 
     case LFO_RATE1:
-      // LFO 1 rate: raw 0-100 → 0-10 Hz. Matches Lyre-1: setF0(value/10, 1/fs).
+      // LFO 1 rate: 0-100 -> 0-10 Hz.
       params_.lfoRate1 = value * 0.1f;
       break;
 
@@ -130,27 +147,37 @@ public:
       break;
 
     case WAVE_FOLD:
-      // Wave fold: raw 0-100 → 0..10. Matches Lyre-1: valf*10 where valf=value/100.
+      // Wave fold: 0-100 -> 0-10 scalar before folding.
       params_.waveFold = value * 0.1f;
       break;
 
     case MOD_TUNE:
-      // Modulator tuning: 0-100 integer, used as (1 + modTune/100) frequency multiplier.
-      // Range: 1.0× (unison) to 2.0× (+1 octave). Matches Lyre-1 semitone/100 usage.
+      // Modulator tune as linear multiplier control.
       params_.modTune = value;
       break;
 
     case OSC_TUNE:
-      // Carrier tuning: same linear-semitone scheme as MOD_TUNE.
+      // Carrier tune as linear multiplier control.
       params_.oscTune = value;
       break;
 
     case FEEDBACK:
-      // FM feedback: raw 0-100 → 0..2. Coefficient reduced from Lyre-1's ×0.2 to ×0.02
-      // so that the full knob range is musically usable without exponential blow-up.
-      // At max (value=100) the feedback multiplier peaks at (1 + 1.0 × 2) = 3×, which
-      // the prevSample_ clamp in process() keeps bounded rather than diverging.
+      // Feedback depth: 0-100 -> 0-2.
+      // The output clamp in process() keeps this stable at high settings.
       params_.feedback = value * 0.02f;
+      break;
+
+    case LFO3_TARGET:
+      if (value < k_lfo3_target_off)
+        value = k_lfo3_target_off;
+      if (value > k_lfo3_target_feedback)
+        value = k_lfo3_target_feedback;
+      params_.lfo3Target = static_cast<uint8_t>(value);
+      break;
+
+    case LFO3_RATE:
+      // Raw 0-100 -> 0-25 Hz for wider modulation speed range.
+      params_.lfo3Rate = value * 0.25f;
       break;
 
     default:
@@ -158,10 +185,18 @@ public:
     }
   }
 
-  // No string-type parameters in this unit.
-  const char *getParameterStrValue(uint8_t, int32_t) const override final
+  // Custom text for string-type LFO target display.
+  const char *getParameterStrValue(uint8_t id, int32_t value) const override final
   {
-    return nullptr;
+    static const char *targetNames[] = {
+      "OFF", "FMDEP", "HDEP", "HR1", "HR2", "FOLD", "FMTUN", "OTUN", "FDBK"
+    };
+
+    if (id != LFO3_TARGET)
+      return nullptr;
+
+    const int32_t target = clipminmaxi32(k_lfo3_target_off, value, k_lfo3_target_feedback);
+    return targetNames[target];
   }
 
   // ---- Life-cycle callbacks ---------------------------------------------------
@@ -175,6 +210,7 @@ public:
     modPhase_     = 0.f;
     lfo1Phase_    = 0.f;
     lfo2Phase_    = 0.f;
+    lfo3Phase_    = 0.f;
 
     // No previous sample output to feed back on first cycle.
     prevSample_   = 0.f;
@@ -183,99 +219,104 @@ public:
     lfo_ = 0.f;
   }
 
-  // ---- Audio parameter setters (called from unit.cc before process()) ---------
-
-  // Normalized pitch (w = f / samplerate). Set once per render block.
+  // Called once per render block from the unit runtime.
   void setPitch(float w0)
   {
     w0_ = w0;
   }
 
-  // Hardware shape_lfo in (-1.0, 1.0). Amplitude-modulates FM depth per Lyre-1.
+  // Hardware shape LFO in (-1, 1). Used to scale FM depth.
   void setShapeLfo(float lfo)
   {
     lfo_ = lfo;
   }
 
-  // ---- Audio render loop -------------------------------------------------------
+  // Main audio render loop.
   void process(const float *__restrict in, float *__restrict out, uint32_t frames) override final
   {
-    // Snapshot parameters so they are stable across the entire block.
+    // Copy parameter block once so values stay stable during this buffer.
     const Params p = params_;
 
-    // Precompute per-sample LFO phase increments: (Hz / samplerate).
-    // k_samplerate_recipf = 1/48000 ≈ 2.083e-5.
-    const float lfo1W0 = p.lfoRate1 * k_samplerate_recipf;
-    const float lfo2W0 = p.lfoRate2 * k_samplerate_recipf;
-
-    // Precompute modulator tuning multiplier: (1 + semitone_offset / 100).
-    // Range: 1.0 (unison) to 2.0 (+1 octave). Matches Lyre-1 semitone/100 formula.
-    const float modFreqMul = 1.f + p.modTune * 0.01f;
-    const float oscFreqMul = 1.f + p.oscTune * 0.01f;
-
-    // The hardware shape_lfo is set once per block via setShapeLfo().
-    // It amplitude-modulates FM depth: effective FM depth = fmDepth * (1 + lfo_) / 2.
-    // Range: 0 (when lfo_ = -1) to fmDepth (when lfo_ = +1).
-    const float fmScale = p.fmDepth * (1.f + lfo_) * 0.5f;
+    // LFO 3 phase increment per sample.
+    const float lfo3W0 = p.lfo3Rate * k_samplerate_recipf;
 
     for (const float *out_end = out + frames; out != out_end; in += 2, out += 1)
     {
-      // ---- LFO update --------------------------------------------------------
-      // Advance both LFO phasors by their per-sample increments and wrap to [0, 1).
-      lfo1Phase_ += lfo1W0;
+      float fmDepthNow = p.fmDepth;
+      float hyperDepthNow = p.lfoDepth;
+      float hyperRate1Now = p.lfoRate1;
+      float hyperRate2Now = p.lfoRate2;
+      float foldNow = p.waveFold;
+      float modTuneNow = static_cast<float>(p.modTune);
+      float oscTuneNow = static_cast<float>(p.oscTune);
+      float feedbackNow = p.feedback;
+
+      lfo3Phase_ += lfo3W0;
+      lfo3Phase_ -= (uint32_t)lfo3Phase_;
+      const float lfo3 = osc_sinf(lfo3Phase_);
+
+      applyLfo3Modulation(p.lfo3Target,
+              lfo3,
+              fmDepthNow,
+              hyperDepthNow,
+              hyperRate1Now,
+              hyperRate2Now,
+              foldNow,
+              modTuneNow,
+              oscTuneNow,
+              feedbackNow);
+
+      const float lfo1W0Now = hyperRate1Now * k_samplerate_recipf;
+      const float lfo2W0Now = hyperRate2Now * k_samplerate_recipf;
+
+      // Update the two Hyper LFO phases.
+      lfo1Phase_ += lfo1W0Now;
       lfo1Phase_ -= (uint32_t)lfo1Phase_;
 
-      lfo2Phase_ += lfo2W0;
+      lfo2Phase_ += lfo2W0Now;
       lfo2Phase_ -= (uint32_t)lfo2Phase_;
 
-      // Sample bipolar sine for each LFO (-1..1).
+      // Sine outputs in the range -1..1.
       const float lfo1Out = osc_sinf(lfo1Phase_);
       const float lfo2Out = osc_sinf(lfo2Phase_);
 
-      // ---- Hyper LFO gate ----------------------------------------------------
-      // Both LFOs must be in their positive half-cycle simultaneously (AND gate).
-      // When the gate is open, pitch is raised by up to 3 × lfoDepth.
-      // This creates the characteristic sudden harmonic pitch-jump of the Lyra-8.
+      // Hyper gate opens only when both LFO lanes are positive.
       const float hyperGate = (lfo1Out >= 0.f && lfo2Out >= 0.f) ? 3.f : 0.f;
-      const float hyperMod  = 1.f + hyperGate * p.lfoDepth;
+      const float hyperMod  = 1.f + hyperGate * hyperDepthNow;
 
-      // ---- Modulator oscillator ----------------------------------------------
-      // The modulator is a simple sine at the same base pitch as the carrier,
-      // offset by modTune (linear) and pitch-jumped by the hyper LFO.
+      // Shape LFO scales FM depth from 0..full depth.
+      const float fmScale = fmDepthNow * (1.f + lfo_) * 0.5f;
+
+      const float modFreqMul = 1.f + modTuneNow * 0.01f;
+      const float oscFreqMul = 1.f + oscTuneNow * 0.01f;
+
+      // Modulator frequency follows base pitch, tune offset, and Hyper gate.
       const float modW0 = w0_ * modFreqMul * hyperMod;
 
-      // Read modulator at its current phase, then advance and wrap.
+      // Read modulator sample, then step phase.
       const float fmSig = osc_sinf(modPhase_);
       modPhase_ += modW0;
       modPhase_ -= (uint32_t)modPhase_;
 
-      // ---- Carrier oscillator ------------------------------------------------
-      // Carrier phase increment: base pitch (with tuning + hyper LFO) plus the
-      // FM contribution (modulator output × effective FM depth × samplerate recip).
+      // Carrier phase step = tuned base pitch + FM contribution.
       const float carrW0 = w0_ * oscFreqMul * hyperMod
                            + fmSig * fmScale * k_samplerate_recipf;
 
-      // Main oscillator: sine amplitude-scaled by waveFold factor.
-      // prevSample_ from the previous sample feeds back to create soft chaotic FM.
-      // The (1 + prevSample_ * feedback) term mirrors Lyre-1's feedback path.
+      // Carrier output with fold drive and feedback from the previous sample.
       const float mainOsc = 0.5f * osc_sinf(carrierPhase_)
-                            * (1.f + p.waveFold)
-                            * (1.f + prevSample_ * p.feedback);
+                            * (1.f + foldNow)
+                            * (1.f + prevSample_ * feedbackNow);
 
-      // Advance carrier phasor and wrap to [0, 1).
+      // Step carrier phase.
       carrierPhase_ += carrW0;
       carrierPhase_ -= (uint32_t)carrierPhase_;
 
-      // ---- Single-stage wave folder ------------------------------------------
-      // Reflects any amplitude that exceeds ±0.5 back inward (triangle fold).
-      // Produces even harmonics and the "crumpled" waveform typical of the Lyra-8.
+      // Single-stage fold with simple reflection above/below +/-0.5.
       const float audioOut = (mainOsc < -0.5f) ? (-1.f - mainOsc)
                            : (mainOsc >  0.5f) ? ( 1.f - mainOsc)
                            : mainOsc;
 
-      // Save pre-fold signal for next sample's feedback calculation.
-      // Clamped to [-1, 1] to bound the multiplicative loop: without this, any
-      // prevSample_ > 1/feedback causes exponential blow-up within a few samples.
+      // Keep feedback memory bounded for stability.
       prevSample_ = clipminmaxf(-1.f, mainOsc, 1.f);
 
       *out = audioOut;
@@ -283,6 +324,53 @@ public:
   }
 
 private:
+  static float clampf(float v, float lo, float hi)
+  {
+    return clipminmaxf(lo, v, hi);
+  }
+
+  static void applyLfo3Modulation(uint8_t target,
+                                  float mod,
+                                  float &fmDepth,
+                                  float &hyperDepth,
+                                  float &hyperRate1,
+                                  float &hyperRate2,
+                                  float &fold,
+                                  float &modTune,
+                                  float &oscTune,
+                                  float &feedback)
+  {
+    switch (target)
+    {
+    case k_lfo3_target_fm_depth:
+      fmDepth = clampf(fmDepth + mod * 350.f, 0.f, 2046.f);
+      break;
+    case k_lfo3_target_hyper_depth:
+      hyperDepth = clampf(hyperDepth + mod * 0.25f, 0.f, 1.f);
+      break;
+    case k_lfo3_target_hyper_rate1:
+      hyperRate1 = clampf(hyperRate1 + mod * 2.f, 0.f, 10.f);
+      break;
+    case k_lfo3_target_hyper_rate2:
+      hyperRate2 = clampf(hyperRate2 + mod * 2.f, 0.f, 10.f);
+      break;
+    case k_lfo3_target_fold:
+      fold = clampf(fold + mod * 2.f, 0.f, 10.f);
+      break;
+    case k_lfo3_target_mod_tune:
+      modTune = clampf(modTune + mod * 20.f, 0.f, 100.f);
+      break;
+    case k_lfo3_target_osc_tune:
+      oscTune = clampf(oscTune + mod * 20.f, 0.f, 100.f);
+      break;
+    case k_lfo3_target_feedback:
+      feedback = clampf(feedback + mod * 0.2f, 0.f, 2.f);
+      break;
+    default:
+      break;
+    }
+  }
+
   Params params_;
 
   // Normalized phase increment for carrier pitch (f / samplerate), set per block.
@@ -296,7 +384,9 @@ private:
   float modPhase_;     // FM modulator sine oscillator phase
   float lfo1Phase_;    // hyper LFO — sine LFO #1 phase
   float lfo2Phase_;    // hyper LFO — sine LFO #2 phase
+  float lfo3Phase_;    // assignable modulation LFO #3 phase
 
   // One-sample delay for the FM feedback path. Holds the pre-fold carrier output.
   float prevSample_;
+
 };

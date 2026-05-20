@@ -1,5 +1,5 @@
-// reference: https://emscripten.org/docs/api_reference/wasm_audio_worklets.html#wasm-audio-worklets
-// example code: https://github.com/emscripten-core/emscripten/tree/main/test/webaudio
+// Emscripten WebAudio worklet reference:
+// https://emscripten.org/docs/api_reference/wasm_audio_worklets.html#wasm-audio-worklets
 
 #include <emscripten/bind.h>
 #include <emscripten/webaudio.h>
@@ -7,7 +7,7 @@
 using namespace emscripten;
 #include "osc.h"
 
-// this needs to be big enough for the stereo output, inputs, params and the worker stack
+// Stack space for the audio worklet thread.
 uint8_t audioThreadStack[4096];
 
 constexpr int SAMPLE_RATE = 48000;
@@ -15,7 +15,7 @@ constexpr int WEB_AUDIO_FRAME_SIZE = 128;
 std::vector<float> ram;
 std::array<float, WEB_AUDIO_FRAME_SIZE> interleavedOut;
 
-Osc processor; // dsp processor instance
+Osc processor; // DSP processor instance
 extern const unit_header_t unit_header;
 
 static float BPM_WASM = 120.f;
@@ -122,9 +122,8 @@ std::string getParameterValueString(int index, int value)
     }
     break;
   case k_unit_param_type_midi_note:
-    // todo
   default:
-    return "unimplemented";
+    return "N/A";
     break;
   };
 
@@ -173,14 +172,14 @@ void noteOn(uint8_t note, uint8_t velocity)
   // printf("Note On: %d, velocity %d\n", note, velocity);
 }
 
-// note off velocity is not supported by logue-sdk
+// Logue SDK note-off does not include release velocity.
 void noteOff(uint8_t note)
 {
   processor.noteOff(note);
   // printf("Note Off: %d\n", note);
 }
 
-// bind unit parameters
+// Expose functions/structs to JavaScript via embind.
 EMSCRIPTEN_BINDINGS(my_module)
 {
   value_object<AudioWorkletParameter>("AudioWorkletParameter")
@@ -217,40 +216,32 @@ bool ProcessAudio(int numInputs, const AudioSampleFrame *inputs,
   assert(outputs->samplesPerChannel == WEB_AUDIO_FRAME_SIZE);
   auto &output = outputs[0];
 
-  // // interleave input buffer (mono -> stereo)
-  // for (int i = 0; i < WEB_AUDIO_FRAME_SIZE; ++i)
-  // {
-  //   interleavedIn[2 * i] = input.data[i];
-  //   interleavedIn[2 * i + 1] = (inputs->numberOfChannels == 1) ? input.data[i] : input.data[i + WEB_AUDIO_FRAME_SIZE];
-  // }
-
   for (int i = 0; i < numParams; ++i)
   {
-    // K-rate parameter: use the first sample for the frame
+    // K-rate param: one value for the full 128-sample block.
     float value = params[i].data[0];
     processor.setParameter(i, value);
   }
 
-  // emscripten_log(EM_LOG_CONSOLE, "bpm=%d", fx_get_bpmf());
   processor.process(nullptr, interleavedOut.data(), WEB_AUDIO_FRAME_SIZE);
 
-  // de-interleave output buffer
+  // Copy output frame into the browser audio buffer.
   for (int i = 0; i < WEB_AUDIO_FRAME_SIZE; ++i)
   {
     output.data[i] = interleavedOut[i];
   }
-  return true; // Keep the graph output going
+  return true; // Keep processing active.
 }
 
 void AudioWorkletProcessorCreated(EMSCRIPTEN_WEBAUDIO_T audioContext, bool success, void *userData)
 {
   if (!success)
-    return; // Check browser console in a debug build for detailed errors
+    return;
 
   ram.resize(processor.getBufferSize());
   processor.init(ram.data());
 
-  // no input, single mono output
+  // This oscillator uses no audio input and outputs mono.
   int outputChannelCounts[1] = {1};
   EmscriptenAudioWorkletNodeCreateOptions options = {
       .numberOfInputs = 0,
@@ -266,7 +257,7 @@ void AudioWorkletProcessorCreated(EMSCRIPTEN_WEBAUDIO_T audioContext, bool succe
 void AudioThreadInitialized(EMSCRIPTEN_WEBAUDIO_T audioContext, bool success, void *userData)
 {
   if (!success)
-    return; // Check browser console in a debug build for detailed errors
+    return;
 
   auto valid_parameters = getValidParameters();
 

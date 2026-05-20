@@ -1,32 +1,65 @@
-# Lirah-1
+# Lirah-1 (NTS-1 mkII)
 
-Lyra-8 style custom oscillator for the Korg NTS-1 mkii. Originally built for the mki by JamesDCheetham https://github.com/jamesdcheetham/Lyre-1.</p> Ported to the mkii by Daniel Majid Mirzakhani. </p>
+`Lirah-1` is a Lyra-8 inspired oscillator for the Korg NTS-1 mkII (`osc` module).
 
-Sine wave with FM hyper LFO (AND gate: high if lfo1 AND lfo2 are high) and single stage wave folder. </p>
-knob A: FM depth</p>
-knob B: LFO depth, ranges from 0 to 12 semitones</p>
-lfo1: LFO rate 1</p>
-lfo2: LFO Rate 2</p>
-wave fold: 1 stage wave folder</p>
-fm tune: relative tuning (unquantized) of modulator oscillator (1 octave range)</p>
-pitch: unquantized pitch adjustment for main oscillator (1 octave range)</p>
-feedback: fm feedback for main oscillator</p>
-</br>
-To build this project:
+This project is based on the original Lyre-1 project by James D. Cheetham:
+https://github.com/jamesdcheetham/Lyre-1
 
-In desired directory:
+Lyra-8 from SOMA Laboratory https://somasynths.com/
 
-Download this repo
+Ported to NTS-1 mkII by Daniel Majid Mirzakhani.
 
-- git clone --recurse-submodules https://github.com/DanielMajid/Lirah-1.git
+## Highlights
 
-Download the ARM GCC toolchain
-- cd logue-sdk/tools/gcc/
-- ./get_gcc_osx.sh
+- Sine-core voice with FM, wave folding, and feedback.
+- Hyper LFO behavior from two internal LFOs that are AND-gated.
+- Extra assignable modulation source (`LFO 3`) with selectable target and rate.
+- Playable range tuning for both modulator pitch and carrier pitch.
 
-Run Make command to build binary</br>
-- run "make install"</p>
+## Controls
 
-Open Korg Kontrol Editor</p>
-- Drag .nts1mkiiunit file into the appropriate module category</p>
-- Click sync</p>
+- `Knob A (FM DEPTH)`: FM amount from the modulator into the carrier.
+- `Knob B (HYPER LFO)`: Depth of the Hyper LFO pitch jump.
+- `LFO1 RATE`: Rate of Hyper LFO lane 1.
+- `LFO2 RATE`: Rate of Hyper LFO lane 2.
+- `FOLD`: Amount of wave folding.
+- `FM TUNE`: Relative tuning of the modulator (up to one octave).
+- `PITCH`: Relative tuning of the carrier (up to one octave).
+- `FEEDBACK`: Feedback amount in the carrier path.
+- `LFO3 TARGET`: Chooses what `LFO 3` modulates.
+- `LFO3 RATE`: Rate of `LFO 3` (0-10 Hz).
+
+### LFO TARGET Map
+
+- `OFF`
+- `FMDEPTH`
+- `HYPER LFO DEPTH`
+- `HYPER LFO 1`
+- `HYPER LFO 2`
+- `FOLD`
+- `FM TUNE`
+- `CARRIER TUNE`
+- `FEEDBACK`
+
+## To build this project
+
+- Clone this repo 
+    In desired directory:
+
+    Download this repo
+
+    git clone --recurse-submodules https://github.com/DanielMajid/Lirah-1.git
+
+- Download the ARM GCC toolchain
+
+    cd logue-sdk/tools/gcc/
+    ./get_gcc_osx.sh
+    Run Make command to build binary
+
+- Compile project
+    Run "make install"
+    Open Korg Kontrol Editor
+
+- Load Project
+    Drag .nts1mkiiunit file into the appropriate module category
+    Click sync

@@ -38,65 +38,62 @@
  *
  */
 
-#include "unit_osc.h"   // Note: Include base definitions for osc units
+#include "unit_osc.h" // Base definitions for oscillator units
 
 // ---- Unit header definition  --------------------------------------------------------------------
 
 const __unit_header unit_header_t unit_header = {
-    .header_size = sizeof(unit_header_t),                  // Size of this header. Leave as is.
-    .target = UNIT_TARGET_PLATFORM | k_unit_module_osc,    // Target platform and module pair for this unit
-    .api = UNIT_API_VERSION,                               // API version for which unit was built. See runtime.h
-    .dev_id = 0x4D616A69U,                                        // Developer ID. See https://github.com/korginc/logue-sdk/blob/master/developer_ids.md
-    .unit_id = 0x3U,                                       // ID for this unit. Scoped within the context of a given dev_id.
-    .version = 0x00010000U,                                // This unit's version: major.minor.patch (major<<16 minor<<8 patch).
-    .name = "Lirah-1",                                     // Name for this unit, will be displayed on device
-    .num_params = 8,                                       // Number of valid parameter descriptors. (max. 10)
+    .header_size = sizeof(unit_header_t),               // Header size expected by the runtime
+    .target = UNIT_TARGET_PLATFORM | k_unit_module_osc, // Platform + module type
+    .api = UNIT_API_VERSION,                            // Runtime API compatibility tag
+    .dev_id = 0x4D616A69U,                              // Developer ID
+    .unit_id = 0x3U,                                    // Unit ID within this developer ID
+    .version = 0x00010000U,                             // Version: major.minor.patch
+    .name = "Lirah-1",                                 // Display name on the hardware
+    .num_params = 10,                                   // Number of active parameters (max 10 on NTS-1 mkII osc)
     .params = {
         // Format:
         // min, max, center (unused), default, type, frac. bits, frac. mode, <reserved>, name
 
         // See common/runtime.h for type enum and unit_param_t structure
 
-        // ---- Fixed/direct UI parameters (shown on A/B knobs) ----------------
+        // Parameters 0 and 1 map to hardware knobs A and B.
 
         // Index 0 — SHAPE knob (A): FM depth.
-        // Raw 0-1023 value; multiplied by 10 in DSP to scale FM depth (0..10230).
-        // Higher values = more timbral complexity and inharmonic FM sidebands.
+        // Raw range is 0-1023. DSP scales this to FM depth.
+        // Higher values add brighter and more inharmonic FM tone.
         {0, 1023, 0, 0, k_unit_param_type_none, 0, 0, 0, {"FM DEPTH"}},
 
         // Index 1 — ALT knob (B): Hyper LFO depth.
-        // Controls the pitch-jump amplitude when the AND-gated LFO gate opens.
-        // 0 = no pitch effect; 1023 = maximum pitch jump (up to +3 semitone-multiples).
+        // Controls how strong the Hyper LFO pitch jump feels.
+        // 0 = no extra jump, 1023 = strongest jump.
         {0, 1023, 0, 0, k_unit_param_type_none, 0, 0, 0, {"HYPER LFO"}},
 
-        // ---- Edit menu parameters (indices 2-9) -----------------------------
+        // Parameters 2-9 are in the edit menu.
 
-        // Index 2 — LFO rate 1. Integer 0-100 → 0-10 Hz.
-        // Rate of the first hyper LFO sine oscillator.
+        // Hyper LFO lane 1 rate: 0-100 maps to 0-10 Hz.
         {0, 100, 0, 10, k_unit_param_type_none, 0, 0, 0, {"LFO1 RATE"}},
 
-        // Index 3 — LFO rate 2. Integer 0-100 → 0-10 Hz.
-        // Rate of the second hyper LFO sine oscillator. Interact with LFO1 to gate.
+        // Hyper LFO lane 2 rate: 0-100 maps to 0-10 Hz.
+        // This combines with lane 1 for the AND-gated Hyper behavior.
         {0, 100, 0, 20, k_unit_param_type_none, 0, 0, 0, {"LFO2 RATE"}},
 
-        // Index 4 — Wave fold depth. Integer 0-100 → 0-10 amplitude scalar.
-        // Scales the carrier sine before the triangle wave folder; adds harmonics.
+        // Fold amount before the single-stage folder.
         {0, 100, 0, 0, k_unit_param_type_none, 0, 0, 0, {"FOLD"}},
 
-        // Index 5 — FM tune (modulator relative pitch). Integer 0-100 → 0 to +1 octave.
-        // Shifts the modulator oscillator frequency above the carrier (linear ratio).
+        // Relative pitch of the FM modulator (0 to +1 octave span).
         {0, 100, 0, 0, k_unit_param_type_none, 0, 0, 0, {"FM TUNE"}},
 
-        // Index 6 — Oscillator tune (carrier pitch offset). Integer 0-100 → 0 to +1 octave.
-        // Shifts the carrier oscillator frequency up, unquantized (linear ratio).
+        // Relative pitch offset of the carrier (0 to +1 octave span).
         {0, 100, 0, 0, k_unit_param_type_none, 0, 0, 0, {"PITCH"}},
 
-        // Index 7 — FM feedback. Integer 0-100 → 0-20 feedback scalar.
-        // Feeds the previous carrier output back into the current sample's amplitude,
-        // producing self-oscillating chaotic tones similar to the Lyra-8.
+        // Feedback depth in the FM/carrier path.
         {0, 100, 0, 0, k_unit_param_type_none, 0, 0, 0, {"FEEDBACK"}},
 
-        // Indices 8-9 — unused.
-        {0, 0, 0, 0, k_unit_param_type_none, 0, 0, 0, {""}},
-        {0, 0, 0, 0, k_unit_param_type_none, 0, 0, 0, {""}}},
+        // LFO 3 destination selector.
+        // 0=OFF, 1=FMDEP, 2=HDEP, 3=HR1, 4=HR2, 5=FOLD, 6=FMTUN, 7=OTUN, 8=FDBK.
+        {0, 8, 0, 0, k_unit_param_type_strings, 0, 0, 0, {"LFO TARGET"}},
+
+        // LFO 3 rate: 0-100 maps to 0-25 Hz.
+        {0, 100, 0, 10, k_unit_param_type_none, 0, 0, 0, {"LFO RATE"}}},
 };
