@@ -96,6 +96,7 @@ TOPT := -mthumb -mno-thumb-interwork -DTHUMB_NO_INTERWORKING -DTHUMB_PRESENT
 #
 
 PRODUCT := $(PROJECT).nts1mkiiunit
+PACKAGE := $(PROJECT).zip
 
 BUILDDIR := $(PROJECT_ROOT)/build
 OBJDIR := $(BUILDDIR)/obj
@@ -229,7 +230,7 @@ $(BUILDDIR)/%.elf: $(OBJS) $(LDSCRIPT)
 
 clean:
 	@echo Cleaning
-	-rm -fR $(PROJECT_ROOT)/.dep $(BUILDDIR) $(PROJECT_ROOT)/$(PRODUCT) $(WASMDIR)
+	-rm -fR $(PROJECT_ROOT)/.dep $(BUILDDIR) $(PROJECT_ROOT)/$(PRODUCT) $(PROJECT_ROOT)/$(PACKAGE) $(WASMDIR)
 	@echo Done
 	@echo
 
@@ -241,6 +242,13 @@ $(BUILDDIR)/$(PRODUCT): | $(OBJS) $(OUTFILES)
 install: $(BUILDDIR)/$(PRODUCT)
 	@echo Deploying to $(INSTALLDIR)/$(PRODUCT)
 	@mv $(BUILDDIR)/$(PRODUCT) $(INSTALLDIR)/$(PRODUCT)
+	@echo Done
+	@echo
+
+package: install
+	@echo Packaging $(PRODUCT) -> $(PACKAGE)
+	@rm -f $(PACKAGE)
+	@zip -q9 $(PACKAGE) $(PRODUCT)
 	@echo Done
 	@echo
 

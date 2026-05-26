@@ -37,6 +37,7 @@
  *
  *  Lirah-1 — Lyra-8 style oscillator for NTS-1 mkII.
  *
+ *  Original mki project by jamesdcheetham https://github.com/jamesdcheetham/Lyre-1
  *  
  *  Signal path:
  *    - Two independent sine LFOs form a "hyper LFO": their output is
@@ -72,7 +73,7 @@ public:
     OSC_TUNE  = 6U, // PITCH      — edit menu (0-100 → 0 to +1 octave)
     FEEDBACK  = 7U, // FEEDBACK   — edit menu (0-100 → 0-2x)
     LFO3_TARGET = 8U, // LFO 3 TARGET — selectable modulation destination
-    LFO3_RATE   = 9U, // LFO 3 RATE   — modulation speed (0-100 -> 0-10 Hz)
+    LFO3_RATE   = 9U, // LFO 3 RATE   — piecewise mapping with finer slow control
     NUM_PARAMS
   };
 
@@ -102,7 +103,7 @@ public:
     int32_t oscTune;// Carrier tune amount   (0-100 -> 1.0x to 2.0x frequency multiplier)
     float feedback; // FM feedback scalar (0..2); multiplies prev sample back into output
     uint8_t lfo3Target; // LFO 3 modulation destination selector
-    float lfo3Rate; // LFO 3 frequency in Hz (0..10)
+    float lfo3Rate; // LFO 3 frequency in Hz (piecewise 0..25, slow-focused in first half)
 
     void reset()
     {
@@ -176,8 +177,20 @@ public:
       break;
 
     case LFO3_RATE:
-      // Raw 0-100 -> 0-25 Hz for wider modulation speed range.
-      params_.lfo3Rate = value * 0.25f;
+      // Piecewise mapping for better low-speed control:
+      // 0-50  -> 0-1 Hz (extra-fine slow start)
+      // 50-100 -> 1-25 Hz (faster sweep retained)
+      {
+        const float norm = clipminmaxf(0.f, value * 0.01f, 1.f);
+        if (norm <= 0.5f)
+        {
+          params_.lfo3Rate = norm * 2.f;
+        }
+        else
+        {
+          params_.lfo3Rate = 1.f + (norm - 0.5f) * 48.f;
+        }
+      }
       break;
 
     default:

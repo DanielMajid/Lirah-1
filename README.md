@@ -27,7 +27,7 @@ Ported to NTS-1 mkII by Daniel Majid Mirzakhani.
 - `PITCH`: Relative tuning of the carrier (up to one octave).
 - `FEEDBACK`: Feedback amount in the carrier path.
 - `LFO3 TARGET`: Chooses what `LFO 3` modulates.
-- `LFO3 RATE`: Rate of `LFO 3` (0-10 Hz).
+- `LFO3 RATE`: Rate of `LFO 3` with slow-focus scaling (`0-50%` = `0-1 Hz`, `50-100%` = `1-25 Hz`).
 
 ### LFO TARGET Map
 

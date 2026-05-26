@@ -48,7 +48,7 @@ const __unit_header unit_header_t unit_header = {
     .api = UNIT_API_VERSION,                            // Runtime API compatibility tag
     .dev_id = 0x4D616A69U,                              // Developer ID
     .unit_id = 0x3U,                                    // Unit ID within this developer ID
-    .version = 0x00010000U,                             // Version: major.minor.patch
+    .version = 0x00010010U,                             // Version: major.minor.patch
     .name = "Lirah-1",                                 // Display name on the hardware
     .num_params = 10,                                   // Number of active parameters (max 10 on NTS-1 mkII osc)
     .params = {
@@ -94,6 +94,7 @@ const __unit_header unit_header_t unit_header = {
         // 0=OFF, 1=FMDEP, 2=HDEP, 3=HR1, 4=HR2, 5=FOLD, 6=FMTUN, 7=OTUN, 8=FDBK.
         {0, 8, 0, 0, k_unit_param_type_strings, 0, 0, 0, {"LFO TARGET"}},
 
-        // LFO 3 rate: 0-100 maps to 0-25 Hz.
+        // LFO 3 rate: piecewise map for finer slow control.
+        // 0-50 -> 0-1 Hz, 50-100 -> 1-25 Hz.
         {0, 100, 0, 10, k_unit_param_type_none, 0, 0, 0, {"LFO RATE"}}},
 };
